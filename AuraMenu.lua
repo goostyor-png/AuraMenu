@@ -677,6 +677,16 @@ do
     ES["Сила реверберации"] = "Intensidad de reverberación"
     -- ===== new strings (tabs / combat / aura / RTX polish) =====
     EN["Бой"] = "Combat"; ES["Бой"] = "Combate"
+    EN["Огонь"] = "Fire"; ES["Огонь"] = "Fuego"
+    EN["Лёд"] = "Ice"; ES["Лёд"] = "Hielo"
+    EN["Энергетический купол"] = "Energy dome"; ES["Энергетический купол"] = "Cúpula de energía"
+    EN["Подсветка окружения"] = "Ambient light"; ES["Подсветка окружения"] = "Luz ambiental"
+    EN["Звёздный дождь"] = "Star rain"; ES["Звёздный дождь"] = "Lluvia de estrellas"
+    EN["Ударная волна при приземлении"] = "Landing shockwave"; ES["Ударная волна при приземлении"] = "Onda al aterrizar"
+    EN["Моментальная наводка в голову"] = "Instant head snap"; ES["Моментальная наводка в голову"] = "Apuntado instantáneo a la cabeza"
+    EN["FOV (ОБЩИЙ)"] = "FOV (SHARED)"; ES["FOV (ОБЩИЙ)"] = "FOV (COMPARTIDO)"
+    EN["Мягкое сияние"] = "Soft glow"; ES["Мягкое сияние"] = "Resplandor suave"
+    EN["Блеск воды"] = "Water shine"; ES["Блеск воды"] = "Brillo del agua"
     EN["Aura.Me"] = "Aura.Me"; ES["Aura.Me"] = "Aura.Me"
     EN["БЫСТРЫЙ ДОСТУП"] = "QUICK ACCESS"; ES["БЫСТРЫЙ ДОСТУП"] = "ACCESO RÁPIDO"
     EN["Скорость вверх/вниз"] = "Vertical speed"; ES["Скорость вверх/вниз"] = "Velocidad vertical"
@@ -2380,8 +2390,8 @@ function __AuraFixUtil.segment(p,
 	return obj
 end
 
-__AuraFixUtil.TAB_STEP, __AuraFixUtil.TAB_H = 24, 22
-local pages, order = {}, {"Музыка", "Эффекты", "Визуал", "RTX", "Игрок", "Бой", "Aura.Me", "Разное", "Настройки"}
+__AuraFixUtil.TAB_STEP, __AuraFixUtil.TAB_H = 27, 25
+local pages, order = {}, {"Музыка", "Эффекты", "Визуал", "RTX", "Игрок", "Бой", "Разное", "Настройки"}
 function __AuraFixUtil.page(name)
 	local p = __AuraFixUtil.new("ScrollingFrame",
 	    {Name = name,
@@ -5404,16 +5414,16 @@ do
         local useBot = botHeld
         local useAssist = not useBot and assistLive
 
-        setRing(ringBot, "bot", AIM.on and AIM.showFov)
-        setRing(ringAss, "ass", AIM.assist and AIM.showFov)
+        setRing(ringBot, "bot", (AIM.on or AIM.assist) and AIM.showFov)
+        setRing(ringAss, "ass", false)
         local kf = 1 - math.exp(-dt * 12)
         if ringBot.Visible then
             local s = AIM.fov * 2
             ringBot.Size = UDim2.fromOffset(ringBot.Size.X.Offset + (s - ringBot.Size.X.Offset) * kf, ringBot.Size.Y.Offset + (s - ringBot.Size.Y.Offset) * kf)
-            ringBotS.Transparency = useBot and .15 or .5
+            ringBotS.Transparency = (useBot or useAssist) and .15 or .5
         end
         if ringAss.Visible then
-            local s = AIM.afov * 2
+            local s = AIM.fov * 2
             ringAss.Size = UDim2.fromOffset(ringAss.Size.X.Offset + (s - ringAss.Size.X.Offset) * kf, ringAss.Size.Y.Offset + (s - ringAss.Size.Y.Offset) * kf)
             ringAssS.Transparency = useAssist and .2 or .6
         end
@@ -5424,7 +5434,7 @@ do
             return
         end
 
-        local fovPx = useBot and AIM.fov or AIM.afov
+        local fovPx = AIM.fov
         local prev = AIM.target
         local plr = scan(cam, fovPx, prev)
         if plr ~= prev then
@@ -5443,7 +5453,8 @@ do
         end
 
         AIM.rollT -= dt
-        local sel = useBot and AIM.part or AIM.apart
+        local sel = useBot and 1 or AIM.apart
+        if AIM.lastSel ~= sel then AIM.lastSel = sel; AIM.aimPart = nil end
         if not AIM.aimPart or not AIM.aimPart.Parent or AIM.rollT <= 0 then
             local p, g = resolvePart(ch, sel)
             AIM.aimPart, AIM.label = p, g
@@ -5453,10 +5464,15 @@ do
         if not part then return end
 
         local tp = part.Position + part.AssemblyLinearVelocity * .05
-        local mode = useBot and AIM.mode or AIM.amode
-        local rate = RATES[mode] * (useBot and 1 or .55)
         local cf = cam.CFrame
-        cam.CFrame = cf:Lerp(CFrame.lookAt(cf.Position, tp), 1 - math.exp(-dt * rate))
+        if useBot then
+            -- Aimbot: instant snap to the head
+            cam.CFrame = CFrame.lookAt(cf.Position, tp)
+        else
+            -- Aim Assist: gentle pull, strength is configurable
+            local rate = RATES[AIM.amode] * .55
+            cam.CFrame = cf:Lerp(CFrame.lookAt(cf.Position, tp), 1 - math.exp(-dt * rate))
+        end
 
         local sp = cam:WorldToViewportPoint(part.Position)
         if sp.Z > 0 then
@@ -5492,6 +5508,7 @@ do
         on = false, orbs = true, halo = true, sigil = true, wings = true, motes = true, trails = true, ripples = true,
         power = 100, speed = 100, orbCount = 5, colorMode = 1,
         pillar = true, helix = true, arcs = true, ghosts = true, waves = true, music = true, flash = 0, waveT = 2,
+        dome = true, light = true, rain = true, landing = true, build = {},
     }
     Util.auraMe = AM
 
@@ -5516,6 +5533,10 @@ do
         elseif mode == 2 then
             local k = (math.sin(t * .8 + (i or 0) * .6) + 1) / 2
             return accent:Lerp(Util.shift(accent), k)
+        elseif mode == 4 then
+            return Color3.fromHSV(.01 + .08 * (math.sin(t * 1.3 + (i or 0) * .6) + 1) / 2, .85, 1)
+        elseif mode == 5 then
+            return Color3.fromHSV(.5 + .1 * (math.sin(t * .9 + (i or 0) * .5) + 1) / 2, .55, 1)
         end
         return accent
     end
@@ -6006,6 +6027,67 @@ do
         AM.flash = 1
     end
 
+    -- ===== extra Aura.Me elements (kept as fields of AM.build to save local slots) =====
+    function AM.build.dome()
+        local p = track(mkPart(Vector3.new(7, 7, 7), Enum.PartType.Ball, "AuraDome"), "main", 1)
+        p.Material = Enum.Material.ForceField
+        p.Transparency = .8
+        local g = {idx = addMover(p)}
+        function g.update(t, dt, cf, k, speedRatio)
+            local sp = AM.speed / 100
+            local s = 7.2 * (1 + math.sin(t * 1.7 * sp) * .04 + (speedRatio or 0) * .06) * (.9 + .1 * k)
+            p.Size = Vector3.new(s, s, s)
+            moverCF[g.idx] = CFrame.new(cf.Position + Vector3.new(0, .3, 0))
+            p.Transparency = math.clamp(.78 - (k - 1) * .12 - (AM.flash or 0) * .2 + math.sin(t * 2.1) * .04, .5, .95)
+        end
+        fx.dome = g
+    end
+
+    function AM.build.light(root)
+        local l = Instance.new("PointLight")
+        l.Name = "AuraMeLight"
+        l.Range, l.Brightness, l.Shadows, l.Color = 16, 2, false, accent
+        l.Parent = root
+        local g = {}
+        function g.update(t, dt, cf, k)
+            local meter = AM.music and __AuraFix_audioMeter
+            local beat = meter and meter.beat or 0
+            l.Brightness = (1.3 + beat * 1.6) * k + (AM.flash or 0) * 2.2
+            l.Range = 14 + 6 * k
+        end
+        function g.recolor(c1) l.Color = c1 end
+        function g.destroy() pcall(function() l:Destroy() end) end
+        fx.light = g
+    end
+
+    function AM.build.rain()
+        local p = mkPart(Vector3.new(16, .4, 16), Enum.PartType.Block, "AuraRain")
+        p.Transparency = 1
+        local em = Instance.new("ParticleEmitter")
+        em.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+        em.Shape = Enum.ParticleEmitterShape.Box
+        em.ShapeStyle = Enum.ParticleEmitterShapeStyle.Volume
+        em.EmissionDirection = Enum.NormalId.Bottom
+        em.Rate = 26
+        em.Lifetime = NumberRange.new(1.4, 2.2)
+        em.Speed = NumberRange.new(7, 11)
+        em.SpreadAngle = Vector2.new(4, 4)
+        em.Acceleration = Vector3.new(0, -4, 0)
+        em.LightEmission = 1
+        em.Size = NumberSequence.new({nk(0, .08), nk(.4, .26), nk(1, 0)})
+        em.Transparency = NumberSequence.new({nk(0, 1), nk(.15, .2), nk(1, 1)})
+        em.Color = ColorSequence.new(accent)
+        em.Parent = p
+        local g = {idx = addMover(p)}
+        function g.update(t, dt, cf, k)
+            moverCF[g.idx] = CFrame.new(cf.Position + Vector3.new(0, 13, 0))
+            em.Rate = 26 * k * (AM.speed / 100)
+        end
+        function g.recolor(c1, c2) em.Color = ColorSequence.new(c1, c2) end
+        function g.destroy() pcall(function() em:Destroy() end) end
+        fx.rain = g
+    end
+
     local function rebuild()
         clearFx()
         if not AM.on then return end
@@ -6024,6 +6106,9 @@ do
         if AM.trails then buildTrails(ch) end
         if AM.pillar then buildPillar() end
         if AM.helix then buildHelix() end
+        if AM.dome then AM.build.dome() end
+        if AM.light then AM.build.light(root) end
+        if AM.rain then AM.build.rain() end
         fx.ripples = AM.ripples and {} or nil
     end
     Util.auraMeRebuild = rebuild
@@ -6099,6 +6184,27 @@ do
             end
         end
 
+        if AM.landing then
+            local hum = ch:FindFirstChildOfClass("Humanoid")
+            local grounded = hum and hum.FloorMaterial ~= Enum.Material.Air
+            if not grounded then
+                AM.fall = math.min(AM.fall or 0, vel.Y)
+            elseif AM.airborne then
+                if (AM.fall or 0) < -28 then
+                    local c = palette(t, 3)
+                    for i = 1, 2 do
+                        task.delay((i - 1) * .12, function()
+                            if AM.on and folder then spawnRipple(root.Position, c, true) end
+                        end)
+                    end
+                    if fx.motes then fx.motes.e1:Emit(60) end
+                    AM.flash = 1
+                end
+                AM.fall = 0
+            end
+            AM.airborne = not grounded
+        end
+
         if AM.waves then
             AM.waveT -= dt
             if AM.waveT <= 0 then
@@ -6159,6 +6265,7 @@ do
         rays = {Intensity = 0, Spread = .5},
         dof = {FarIntensity = 0, NearIntensity = 0, FocusDistance = 50, InFocusRadius = 30},
         atmo = {Density = 0, Offset = 0, Color = Color3.fromRGB(199, 199, 199), Decay = Color3.fromRGB(106, 112, 125), Glare = 0, Haze = 0},
+        glow = {Intensity = 0, Size = 120, Threshold = 1.2},
     }
     local rayP = RaycastParams.new()
     rayP.FilterType = Enum.RaycastFilterType.Exclude
@@ -6196,6 +6303,7 @@ do
         local fx = RTX.fx
         if not fx.bloom then fx.bloom = mkFx("BloomEffect", "AuraRTX_Bloom", DEFAULTS.bloom) end
         if not fx.cc then fx.cc = mkFx("ColorCorrectionEffect", "AuraRTX_CC", DEFAULTS.cc) end
+        if not fx.glow then fx.glow = mkFx("BloomEffect", "AuraRTX_Glow", DEFAULTS.glow) end
         if not fx.flash then fx.flash = mkFx("ColorCorrectionEffect", "AuraRTX_Flash", DEFAULTS.cc) end
         if not fx.rays then fx.rays = mkFx("SunRaysEffect", "AuraRTX_Rays", DEFAULTS.rays) end
         if not fx.dof then fx.dof = mkFx("DepthOfFieldEffect", "AuraRTX_DOF", DEFAULTS.dof) end
@@ -6376,6 +6484,7 @@ do
 
     RTX.opt.future = not UIS.TouchEnabled
     RTX.opt.shadows, RTX.opt.glow, RTX.opt.grade, RTX.opt.haze, RTX.opt.dof = true, true, true, true, true
+    RTX.opt.softglow, RTX.opt.water = true, true
 
     -- extra "RTX quality" layer on top of every mode profile
     function RTX.polish(p, atmoBase)
@@ -6394,6 +6503,19 @@ do
             q.bloom.Intensity = (q.bloom.Intensity or 0) + .12 * k
             q.bloom.Size = math.max(q.bloom.Size or 24, 30)
             q.bloom.Threshold = math.clamp((q.bloom.Threshold or 1) - .08 * k, .5, 4)
+        end
+        if RTX.opt.softglow then
+            q.glow = {Intensity = .16 * k, Size = 120, Threshold = math.clamp(1.15 - .1 * k, .6, 2)}
+        end
+        if RTX.opt.water and RTX.terrainSnap then
+            q.terrain = merge({}, p.terrain)
+            local cur = q.terrain.WaterReflectance or RTX.terrainSnap.WaterReflectance or 1
+            q.terrain.WaterReflectance = math.clamp(math.max(cur, .65 + .2 * k), 0, 1)
+            q.terrain.WaterTransparency = math.clamp(q.terrain.WaterTransparency or RTX.terrainSnap.WaterTransparency or .5, 0, 1) * .85
+        end
+        if RTX.opt.haze then
+            q.rays = merge({}, p.rays)
+            q.rays.Intensity = (q.rays.Intensity or 0) + .03 * k
         end
         if RTX.opt.grade then
             q.cc.Contrast = (q.cc.Contrast or 0) + .05 * k
@@ -6436,6 +6558,7 @@ do
         p = RTX.polish(p, atmoBase)
         tweenTo(Lighting, merge(lightBase, p.light), dur)
         tweenTo(fx.bloom, merge(DEFAULTS.bloom, p.bloom), dur)
+        tweenTo(fx.glow, merge(DEFAULTS.glow, p.glow), dur)
         tweenTo(fx.cc, merge(DEFAULTS.cc, p.cc), dur)
         tweenTo(fx.rays, merge(DEFAULTS.rays, p.rays), dur)
         tweenTo(fx.dof, merge(DEFAULTS.dof, p.dof), dur)
@@ -6537,7 +6660,7 @@ do
         for _, key in ipairs(LIGHT_KEYS) do lightBack[key] = snap[key] end
         lightBack.ClockTime = snap.ClockTime
         tweenTo(Lighting, lightBack, 1.6)
-        for _, name in ipairs({"bloom", "cc", "rays", "dof"}) do tweenTo(fx[name], DEFAULTS[name], 1.6) end
+        for _, name in ipairs({"bloom", "glow", "cc", "rays", "dof"}) do tweenTo(fx[name], DEFAULTS[name], 1.6) end
         if fx.atmo then tweenTo(fx.atmo, fx.atmoOwn and DEFAULTS.atmo or fx.atmoSnap, 1.6) end
         local terrain = workspace:FindFirstChildOfClass("Terrain")
         if terrain and RTX.terrainSnap then tweenTo(terrain, RTX.terrainSnap, 1.6) end
@@ -7096,6 +7219,8 @@ do
     end, "rtxFuture")
     Util.toggle(pr, "Мягкие тени и небо", true, rtxOpt("shadows"), "rtxShadows")
     Util.toggle(pr, "Свечение (Bloom)", true, rtxOpt("glow"), "rtxGlow")
+    Util.toggle(pr, "Мягкое сияние", true, rtxOpt("softglow"), "rtxSoftGlow")
+    Util.toggle(pr, "Блеск воды", true, rtxOpt("water"), "rtxWater")
     Util.toggle(pr, "Цветокоррекция", true, rtxOpt("grade"), "rtxGrade")
     Util.toggle(pr, "Объёмная дымка", true, rtxOpt("haze"), "rtxHaze")
     Util.toggle(pr, "Глубина резкости", true, rtxOpt("dof"), "rtxDof")
@@ -7113,6 +7238,7 @@ do
     -- ================= ИГРОК =================
     local pp = Util.page("Игрок")
     Util.section(pp, "БЫСТРЫЙ ДОСТУП")
+    do
     local chipCard = Util.card(pp, 46)
     local chipDefs = {
         {"Полёт", function() return FLY.on end, function() Util.flyToggle.Set(not FLY.on) end},
@@ -7147,6 +7273,7 @@ do
             end
         end
     end)
+    end
 
     Util.section(pp, "ПОЛЁТ")
     Util.flyToggle = Util.toggle(pp, "Полёт", false, function(v) Util.flySet(v) end)
@@ -7156,33 +7283,27 @@ do
     Util.toggle(pp, "Наклон тела в полёте", true, function(v) FLY.tiltOn = v end, "flyTilt")
     Util.section(pp, "ДВИЖЕНИЕ")
     Util.noclipToggle = Util.toggle(pp, "Noclip", false, function(v) Util.noclipSet(v) end)
-    Util.section(pp, "ПОДСКАЗКИ УПРАВЛЕНИЯ")
-    local help = Util.card(pp, 50)
-    Util.lbl(help, "ПК: клавиши в Настройки → Бинды", 11, C.sub, {Position = UDim2.fromOffset(10, 6), Size = UDim2.new(1, -20, 0, 18)})
-    Util.lbl(help, "Телефон: ▲ ▼ появляются справа во время полёта", 11, C.sub, {Position = UDim2.fromOffset(10, 26), Size = UDim2.new(1, -20, 0, 18)})
-
     -- ================= БОЙ =================
     local pc = Util.page("Бой")
     Util.section(pc, "AIMBOT")
     Util.aimToggle = Util.toggle(pc, "Aimbot", false, function(v) AIM.on = v end)
-    Util.segment(pc, "Скорость наводки", modeOpts, function(i) AIM.mode = i end, 1, "aimMode")
-    Util.segment(pc, "Куда попадать", hitOpts, function(i) AIM.part = i end, 1, "aimPart")
-    Util.slider(pc, "Радиус FOV", 30, 400, 140, function(v) return string.format("%d px", v) end, function(v) AIM.fov = v end, 5, "aimFov")
     Util.toggle(pc, "Aimbot по зажатой ПКМ", true, function(v) AIM.hold = v end, "aimHold")
+    local aimInfo = Util.card(pc, 28)
+    Util.lbl(aimInfo, "Моментальная наводка в голову", 11, C.sub, {Position = UDim2.fromOffset(10, 0), Size = UDim2.new(1, -20, 1, 0)})
 
     Util.section(pc, "AIM ASSIST")
     Util.assistToggle = Util.toggle(pc, "Aim Assist", false, function(v) AIM.assist = v end)
     Util.segment(pc, "Сила помощи", modeOpts, function(i) AIM.amode = i end, 1, "assistMode")
     Util.segment(pc, "Куда помогать", hitOpts, function(i) AIM.apart = i end, 1, "assistPart")
-    Util.slider(pc, "Радиус помощи", 30, 300, 90, function(v) return string.format("%d px", v) end, function(v) AIM.afov = v end, 5, "assistFov")
+
+    Util.section(pc, "FOV (ОБЩИЙ)")
+    Util.slider(pc, "Радиус FOV", 30, 400, 140, function(v) return string.format("%d px", v) end, function(v) AIM.fov = v end, 5, "aimFov")
+    Util.toggle(pc, "Показывать круг FOV", true, function(v) AIM.showFov = v end, "aimShowFov")
 
     Util.section(pc, "ЦЕЛЬ")
     Util.slider(pc, "Дальность цели", 50, 1000, 400, function(v) return string.format("%d %s", v, T("ст.")) end, function(v) AIM.range = v end, 10, "aimRange")
     Util.toggle(pc, "Проверка стен", true, function(v) AIM.wall = v end, "aimWall")
     Util.toggle(pc, "Проверка команды", false, function(v) AIM.team = v end, "aimTeam")
-
-    Util.section(pc, "ОТОБРАЖЕНИЕ")
-    Util.toggle(pc, "Показывать круг FOV", true, function(v) AIM.showFov = v end, "aimShowFov")
     Util.toggle(pc, "Показывать метку цели", true, function(v) AIM.showLabel = v end, "aimShowLabel")
 
     Util.section(pc, "УПРАВЛЕНИЕ")
@@ -7190,14 +7311,14 @@ do
     Util.lbl(combatHelp, "Клавиши: Настройки → Бинды", 11, C.sub, {Position = UDim2.fromOffset(10, 0), Size = UDim2.new(1, -20, 1, 0)})
 
     -- ================= AURA.ME =================
-    local pa = Util.page("Aura.Me")
+    local pa = pp
     local function rebuild() if AM.on then Util.auraMeRebuild() end end
     Util.section(pa, "AURA.ME")
     Util.auraToggle = Util.toggle(pa, "Aura.Me", false, function(v) Util.auraMeSet(v) end)
     Util.slider(pa, "Интенсивность", 20, 200, 100, fmtPct, function(v) AM.power = v end, 5, "amPower")
     Util.slider(pa, "Скорость эффектов", 40, 250, 100, fmtPct, function(v) AM.speed = v end, 5, "amSpeed")
     Util.slider(pa, "Количество орбов", 2, 8, 5, int, function(v) AM.orbCount = v; rebuild() end, 1, "amOrbCount", true)
-    Util.segment(pa, "Цвет эффектов", {"Акцент", "Градиент", "Радуга"}, function(i) AM.colorMode = i end, 1, "amColor")
+    Util.segment(pa, "Цвет эффектов", {"Акцент", "Градиент", "Радуга", "Огонь", "Лёд"}, function(i) AM.colorMode = i end, 1, "amColor")
 
     Util.section(pa, "ЭЛЕМЕНТЫ")
     Util.toggle(pa, "Орбы с лучами", true, function(v) AM.orbs = v; rebuild() end, "amOrbs")
@@ -7208,13 +7329,22 @@ do
     Util.toggle(pa, "Магический круг", true, function(v) AM.sigil = v; rebuild() end, "amSigil")
     Util.toggle(pa, "Крылья света", true, function(v) AM.wings = v; rebuild() end, "amWings")
     Util.toggle(pa, "Частицы и свечение", true, function(v) AM.motes = v; rebuild() end, "amMotes")
+    Util.toggle(pa, "Энергетический купол", true, function(v) AM.dome = v; rebuild() end, "amDome")
+    Util.toggle(pa, "Подсветка окружения", true, function(v) AM.light = v; rebuild() end, "amLight")
+    Util.toggle(pa, "Звёздный дождь", true, function(v) AM.rain = v; rebuild() end, "amRain")
 
     Util.section(pa, "ДЕТАЛИ")
     Util.toggle(pa, "Остаточные образы", true, function(v) AM.ghosts = v end, "amGhosts")
     Util.toggle(pa, "Волны импульса", true, function(v) AM.waves = v end, "amWaves")
     Util.toggle(pa, "Реакция на музыку", true, function(v) AM.music = v end, "amMusic")
+    Util.toggle(pa, "Ударная волна при приземлении", true, function(v) AM.landing = v end, "amLanding")
     Util.toggle(pa, "Следы рук и ног", true, function(v) AM.trails = v; rebuild() end, "amTrails")
     Util.toggle(pa, "Рябь от шагов", true, function(v) AM.ripples = v; rebuild() end, "amRipples")
+    Util.section(pp, "ПОДСКАЗКИ УПРАВЛЕНИЯ")
+    local help = Util.card(pp, 50)
+    Util.lbl(help, "ПК: клавиши в Настройки → Бинды", 11, C.sub, {Position = UDim2.fromOffset(10, 6), Size = UDim2.new(1, -20, 0, 18)})
+    Util.lbl(help, "Телефон: ▲ ▼ появляются справа во время полёта", 11, C.sub, {Position = UDim2.fromOffset(10, 26), Size = UDim2.new(1, -20, 0, 18)})
+
 end
 
 do
