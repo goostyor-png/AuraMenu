@@ -21,6 +21,8 @@ local genv = (getgenv and getgenv()) or _G
 if genv.AuraUnload then pcall(genv.AuraUnload) end
 if pgui:FindFirstChild("AuraMenu") then pgui.AuraMenu:Destroy() end
 if SoundService:FindFirstChild("AuraSound") then SoundService.AuraSound:Destroy() end
+local oldUiSfx = SoundService:FindFirstChild("AuraUISFX")
+if oldUiSfx then oldUiSfx:Destroy() end
 for _, v in ipairs(Lighting:GetChildren()) do
     if v.Name == "AuraBlur" or v.Name == "AuraEnvBloom" or v.Name == "AuraEnvColor"
         or v.Name == "AuraEnvRays" or v.Name == "AuraEnvDOF" or v.Name == "AuraEnvAtmosphere"
@@ -156,6 +158,7 @@ local EN = {
 	    ["Прозрачность"] = "Transparency",
 	    ["Размер меню"] = "Menu size",
 	    ["Размытие фона"] = "Background blur",
+    ["Звуки интерфейса"] = "UI sounds",
 	    ["Сбросить позицию"] = "Reset position",
 	    ["Выгрузить меню"] = "Unload menu",
 	    ["Ничего не играет"] = "Nothing playing",
@@ -280,9 +283,6 @@ local EN = {
 	    ["Закрыть"] = "Close",
 }
 
-
--- Spanish localization: any legacy key not listed here falls back to English,
--- so the interface never abruptly switches back to Russian while Español is active.
 local ES = {
     ["Музыка"]="Música",
         ["Эффекты"]="Efectos",
@@ -352,6 +352,7 @@ local ES = {
         ["Прозрачность"]="Transparencia",
         ["Размер меню"]="Tamaño del menú",
         ["Размытие фона"]="Desenfoque del fondo",
+        ["Звуки интерфейса"]="Sonidos de interfaz",
         ["Сбросить позицию"]="Restablecer posición",
         ["Выгрузить меню"]="Cerrar menú",
         ["Ничего не играет"]="No se está reproduciendo nada",
@@ -675,7 +676,7 @@ do
     ES["Быстрые кнопки"] = "Botones rápidos"
     ES["Полёт"] = "Vuelo"
     ES["Сила реверберации"] = "Intensidad de reverberación"
-    -- ===== new strings (tabs / combat / aura / RTX polish) =====
+    
     EN["Бой"] = "Combat"; ES["Бой"] = "Combate"
     EN["Огонь"] = "Fire"; ES["Огонь"] = "Fuego"
     EN["Лёд"] = "Ice"; ES["Лёд"] = "Hielo"
@@ -890,6 +891,7 @@ function __AuraFixUtil.press(b,
 	    ov) end
 	cn(b.MouseEnter,
 	    function()
+        if __AuraFixUtil.playUiSound then __AuraFixUtil.playUiSound("hover") end
 		tw(ov,
 		    {BackgroundTransparency = .88},
 		    .18,
@@ -913,6 +915,7 @@ function __AuraFixUtil.press(b,
 	cn(b.InputBegan,
 	    function(i)
 		if not __AuraFixUtil.isPress(i) then return end
+        if __AuraFixUtil.playUiSound then __AuraFixUtil.playUiSound("click") end
 		tw(s,
 		    {Scale = .94},
 		    .09,
@@ -964,6 +967,35 @@ if type(cfg.accent) == "table" and cfg.accent[3] then accent = Color3.new(cfg.ac
 rainbow = cfg.rainbow == true
 lang = cfg.lang == 2 and "English" or (cfg.lang == 3 and "Español" or "Русский")
 
+local uiSfxFolder = Instance.new("Folder")
+uiSfxFolder.Name = "AuraUISFX"
+uiSfxFolder.Parent = SoundService
+local uiSfxPool = {click = {}, hover = {}}
+local uiSfxIndex = {click = 0, hover = 0}
+local function addUiSfx(kind, index, volume, playbackSpeed)
+    local audio = Instance.new("Sound")
+    audio.Name = kind .. tostring(index)
+    audio.SoundId = kind == "hover" and "rbxassetid://5991592592" or "rbxassetid://178104975"
+    audio.Volume = volume
+    audio.PlaybackSpeed = playbackSpeed
+    audio.Parent = uiSfxFolder
+    table.insert(uiSfxPool[kind], audio)
+end
+for i = 1, 3 do addUiSfx("click", i, .13, 1 + (i - 2) * .025) end
+for i = 1, 2 do addUiSfx("hover", i, .045, 1.08 + (i - 1) * .04) end
+function __AuraFixUtil.playUiSound(kind)
+    if cfg.uiSounds == false then return end
+    local pool = uiSfxPool[kind]
+    if not pool or #pool == 0 then return end
+    uiSfxIndex[kind] = (uiSfxIndex[kind] % #pool) + 1
+    local audio = pool[uiSfxIndex[kind]]
+    pcall(function()
+        audio:Stop()
+        audio.TimePosition = 0
+        audio:Play()
+    end)
+end
+
 local gui = __AuraFixUtil.new("ScreenGui",
     {Name = "AuraMenu",
     ResetOnSpawn = false,
@@ -972,7 +1004,6 @@ local gui = __AuraFixUtil.new("ScreenGui",
     DisplayOrder = 100},
     pgui)
 
--- Fixed dark palette; accent color remains user-adjustable in Settings.
 local blur = __AuraFixUtil.new("BlurEffect",
     {Name = "AuraBlur",
     Size = 0},
@@ -1392,14 +1423,13 @@ do
 end
 
 do
-    -- extra background detail layer (sits under the top bar / sidebar / content)
+    
     local Util = __AuraFixUtil
     local new, acc = Util.new, Util.acc
     local nk = NumberSequenceKeypoint.new
     local rng = Random.new()
     local half = Vector2.new(.5, .5)
 
-    -- 1) dot grid with a diagonal wave
     local COLS, ROWS = 13, 7
     for gx = 0, COLS - 1 do
         for gy = 0, ROWS - 1 do
@@ -1414,7 +1444,6 @@ do
         end
     end
 
-    -- 2) HUD corner brackets with pulsing nodes
     for c = 1, 4 do
         local right, bottom = c % 2 == 0, c > 2
         local ax, ay = right and 1 or 0, bottom and 1 or 0
@@ -1434,7 +1463,6 @@ do
         end
     end
 
-    -- 3) drifting plus marks
     for _ = 1, 7 do
         local p = new("Frame", {AnchorPoint = half, Position = UDim2.fromScale(rng:NextNumber(), rng:NextNumber()), Size = UDim2.fromOffset(7, 7), BackgroundTransparency = 1}, main)
         local a = new("Frame", {AnchorPoint = half, Position = UDim2.fromScale(.5, .5), Size = UDim2.new(1, 0, 0, 1), BackgroundTransparency = .8}, p)
@@ -1446,7 +1474,6 @@ do
         TS:Create(b, TweenInfo.new(d / 3, EASE.Sine, DIR.InOut, -1, true), {BackgroundTransparency = .95}):Play()
     end
 
-    -- 4) aurora ribbons
     for k = 1, 2 do
         local aur = new("Frame", {AnchorPoint = half, Position = UDim2.fromScale(.5, k == 1 and .35 or .7), Size = UDim2.fromScale(1.6, .2), Rotation = k == 1 and -14 or 10, BackgroundTransparency = .9}, main)
         acc(aur, "BackgroundColor3", function() return k == 1 and accent or Util.shift(accent) end)
@@ -1454,7 +1481,6 @@ do
         TS:Create(aur, TweenInfo.new(13 + k * 4, EASE.Sine, DIR.InOut, -1, true), {Position = UDim2.fromScale(.5, k == 1 and .65 or .3), Rotation = k == 1 and -4 or 18, BackgroundTransparency = .94}):Play()
     end
 
-    -- 5) circuit traces with travelling data packets
     for k = 1, 3 do
         local y = .22 + k * .2
         local line = new("Frame", {AnchorPoint = Vector2.new(0, .5), Position = UDim2.fromScale(0, y), Size = UDim2.new(1, 0, 0, 1), BackgroundTransparency = .95}, main)
@@ -1465,7 +1491,6 @@ do
         TS:Create(pk, TweenInfo.new(5 + k * 1.3, EASE.Linear, DIR.Out, -1, false, k * 1.7), {Position = UDim2.fromScale(1.1, y)}):Play()
     end
 
-    -- 6) left edge ruler with travelling highlight
     for i = 0, 19 do
         local t = new("Frame", {Position = UDim2.new(0, 1, 0, TOP + 8 + i * 9), Size = UDim2.fromOffset(i % 5 == 0 and 5 or 3, 1), BackgroundTransparency = .86}, main)
         acc(t, "BackgroundColor3")
@@ -1474,7 +1499,6 @@ do
         end)
     end
 
-    -- 7) film grain
     local grain = {}
     for i = 1, 26 do
         grain[i] = new("Frame", {Size = UDim2.fromOffset(1, 1), BackgroundTransparency = .93, BackgroundColor3 = WHITE, Position = UDim2.fromScale(rng:NextNumber(), rng:NextNumber())}, main)
@@ -1491,7 +1515,6 @@ do
         end
     end)
 
-    -- 8) random sparkle glints
     task.spawn(function()
         while main.Parent do
             task.wait(1.4 + rng:NextNumber() * 2.4)
@@ -1507,7 +1530,6 @@ do
         end
     end)
 
-    -- 9) soft light that follows the cursor
     if UIS.MouseEnabled then
         local lens = new("Frame", {AnchorPoint = half, Size = UDim2.fromOffset(120, 120), BackgroundTransparency = 1, Visible = false}, main)
         Util.round(lens, 60)
@@ -1758,7 +1780,6 @@ end
 cn(closeB.Activated,
     function() __AuraFixUtil.setOpen(false) end)
 
--- The minus button minimizes the window to its title bar; it does not close it.
 local function setCollapsed(value)
     if isCollapsed == value then return end
     isCollapsed = value
@@ -1766,7 +1787,7 @@ local function setCollapsed(value)
     local token = collapseToken
     colB.Text = value and "+" or "–"
     if value then
-        -- Fade the content slightly before clipping it to the title bar.
+        
         tw(content,
             {GroupTransparency = 1},
             .14,
@@ -1910,7 +1931,9 @@ function __AuraFixUtil.hov(b,
     f,
     st)
 	cn(b.MouseEnter,
-	    function() tw(st,
+	    function()
+        if __AuraFixUtil.playUiSound then __AuraFixUtil.playUiSound("hover") end
+        tw(st,
 	    {Transparency = .75},
 	    .2); tw(f,
 	    {BackgroundColor3 = C.card:Lerp(WHITE,
@@ -2087,7 +2110,7 @@ function __AuraFixUtil.toggle(p,
 		if not silent and cb then cb(on) end
 	end
 	cn(b.InputBegan,
-	    function(i) if __AuraFixUtil.isPress(i) then held = true; place() end end)
+	    function(i) if __AuraFixUtil.isPress(i) then held = true; if __AuraFixUtil.playUiSound then __AuraFixUtil.playUiSound("click") end; place() end end)
 	cn(b.InputEnded,
 	    function(i) if __AuraFixUtil.isPress(i) then held = false; place() end end)
 	cn(b.Activated,
@@ -2372,9 +2395,11 @@ function __AuraFixUtil.segment(p,
 		    o)
 		btns[k] = b
 		cn(b.Activated,
-		    function() if cur ~= k then obj.Set(k) end end)
+		    function() if cur ~= k then if __AuraFixUtil.playUiSound then __AuraFixUtil.playUiSound("click") end; obj.Set(k) end end)
 		cn(b.MouseEnter,
-		    function() tw(st,
+		    function()
+            if __AuraFixUtil.playUiSound then __AuraFixUtil.playUiSound("hover") end
+            tw(st,
 		    {Transparency = .75},
 		    .2) end)
 		cn(b.MouseLeave,
@@ -3218,6 +3243,7 @@ function __AuraFixUtil.unload()
         if object and object.Parent then pcall(function() object:Destroy() end) end
     end
     if envCleanup then pcall(envCleanup) end
+    if uiSfxFolder and uiSfxFolder.Parent then pcall(function() uiSfxFolder:Destroy() end) end
     if __AuraFix_ambientFolder and __AuraFix_ambientFolder.Parent then pcall(function() __AuraFix_ambientFolder:Destroy() end) end
     genv.AuraUnload = nil
 end
@@ -3621,7 +3647,6 @@ end
 
 __AuraFix_renderQueue()
 
--- The redundant floating mini-player has been removed; playback stays inside the Music tab.
 __AuraFix_vc = __AuraFixUtil.card(__AuraFix_pg,
     56)
 __AuraFix_bars = {}
@@ -3978,10 +4003,6 @@ echoFeedbackS = __AuraFixUtil.slider(__AuraFix_pe,
     .05,
     "echoFeedback")
 
--- Environment presets use native Roblox post-processing controls.
--- Reference patterns: https://github.com/Eldergenix/Roblox-Game/blob/main/.agents/skills/roblox-lighting/SKILL.md
--- and https://github.com/sebasbimbi/roblox-studio-agent/blob/main/apps/desktop/agent/skills/roblox-lighting/references/full.md
--- Preset values below are authored for AURA; no remote code is executed.
 __AuraFix_envBloom = Instance.new("BloomEffect")
 __AuraFix_envBloom.Name = "AuraEnvBloom"
 __AuraFix_envBloom.Enabled = false
@@ -4112,8 +4133,7 @@ local envStrength = math.clamp(tonumber(cfg.envBloomStrength) or 60,
     100)
 local envBaseBloom, envPhase, envTick, envApplyToken = .32, 0, 0, 0
 local envButtons = {}
--- Skybox texture references adapted from a public GitHub example; no remote code is executed.
--- https://gist.github.com/dexexisted-alt/655b8fc9323571ef7d46ef55eb66dc38
+
 local envSkySets = {
     [1] = {Bk = "rbxassetid://271042516",
         Dn = "rbxassetid://271077243",
@@ -4398,7 +4418,7 @@ local envPresets = {
         dofNear = 0,
         focus = 75,
         radius = 110},
-        -- Custom AURA preset: animated prismatic tint with restrained glow waves.
+        
     [6] = {name = "Призматическая аврора",
         clockTime = 20.2,
         lightBrightness = 2.1,
@@ -4587,11 +4607,6 @@ function __AuraFixUtil.selectEnvironmentPreset(index)
     __AuraFixUtil.toast(T("Активен эффект: ") .. T((envPresets[index] or envPresets[0]).name),
         C.good)
 end
-
-
--- Ambient effects are authored with native Roblox parts, Trails and Tweens.
--- This keeps them self-contained: no remote code or external model requires.
--- Atmospheric particle effects (meteors, aurora dust, snow, etc.) have been removed.
 
 __AuraFix_pv = __AuraFixUtil.page("Визуал")
 __AuraFixUtil.section(__AuraFix_pv,
@@ -4949,8 +4964,7 @@ __AuraFixUtil.slider(__AuraFix_ps,
 	local camera = workspace.CurrentCamera
 	local size = camera and camera.ViewportSize or Vector2.new(800,
 	    400)
-	-- Let the user both shrink and enlarge the menu. Larger values may
-	-- extend beyond the viewport on very small screens, but remain user-controlled.
+
 	baseScale = math.clamp(v / 100, .52, 1.30)
 	tw(mscale,
 	    {Scale = baseScale},
@@ -4974,6 +4988,11 @@ __AuraFixUtil.toggle(__AuraFix_ps,
 	    .3) end
 end,
     "blur")
+__AuraFixUtil.toggle(__AuraFix_ps,
+    "Звуки интерфейса",
+    true,
+    function(v) cfg.uiSounds = v end,
+    "uiSounds")
 __AuraFix_settingsQuick = __AuraFixUtil.row(__AuraFix_ps,
     32)
 __AuraFixUtil.button(__AuraFix_settingsQuick,
@@ -4996,7 +5015,7 @@ __AuraFixUtil.button(__AuraFix_settingsQuick,
 		if control.Default ~= nil and control.Set then pcall(function() control.Set(control.Default) end) end
 	end
 	cfg.rainbow = false
-	-- Reset the visual preset as well as standard toggles so effects do not linger.
+	
 	envPreset,
 	    envOn,
 	    envStrength = 0,
@@ -5466,10 +5485,10 @@ do
         local tp = part.Position + part.AssemblyLinearVelocity * .05
         local cf = cam.CFrame
         if useBot then
-            -- Aimbot: instant snap to the head
+            
             cam.CFrame = CFrame.lookAt(cf.Position, tp)
         else
-            -- Aim Assist: gentle pull, strength is configurable
+            
             local rate = RATES[AIM.amode] * .55
             cam.CFrame = cf:Lerp(CFrame.lookAt(cf.Position, tp), 1 - math.exp(-dt * rate))
         end
@@ -5682,23 +5701,23 @@ do
 
     local function buildHalo()
         local group = {segs = {}}
-        local N = 26
+        local N = 30
         for i = 1, N do
             local p = track(mkPart(Vector3.new(.34, .07, .1), nil, "AuraHalo"), "main", i)
             group.segs[i] = {part = p, idx = addMover(p), a = (i - 1) / N * tau}
         end
         local sparkle = {}
-        for i = 1, 4 do
+        for i = 1, 6 do
             local s = track(mkPart(Vector3.new(.16, .16, .16), Enum.PartType.Ball, "AuraHaloSpark"), "light", i)
-            sparkle[i] = {part = s, idx = addMover(s), a = (i - 1) / 4 * tau}
+            sparkle[i] = {part = s, idx = addMover(s), a = (i - 1) / 6 * tau}
         end
         group.sparkle = sparkle
         function group.update(t, dt, cf, k)
             local sp = AM.speed / 100
             local pulse = 1 + math.sin(t * 2.4 * sp) * .06
-            local R = 1.35 * pulse * (.8 + .2 * k)
-            local y = 3.55 + math.sin(t * 1.6 * sp) * .12
-            local spin = t * .9 * sp
+            local R = 1.48 * pulse * (.8 + .2 * k)
+            local y = 3.62 + math.sin(t * 1.6 * sp) * .14
+            local spin = t * 1.02 * sp
             for i, s in ipairs(group.segs) do
                 local a = s.a + spin
                 local pos = cf * Vector3.new(math.cos(a) * R, y, math.sin(a) * R)
@@ -5710,7 +5729,7 @@ do
                 local a = -s.a - spin * 2.2
                 local pos = cf * Vector3.new(math.cos(a) * (R + .15), y + math.sin(t * 5 + i * 2) * .18, math.sin(a) * (R + .15))
                 moverCF[s.idx] = CFrame.new(pos)
-                local sz = .12 + .1 * math.abs(math.sin(t * 4 + i))
+                local sz = .14 + .12 * math.abs(math.sin(t * 4.4 + i))
                 s.part.Size = Vector3.new(sz, sz, sz)
             end
         end
@@ -6027,18 +6046,27 @@ do
         AM.flash = 1
     end
 
-    -- ===== extra Aura.Me elements (kept as fields of AM.build to save local slots) =====
     function AM.build.dome()
         local p = track(mkPart(Vector3.new(7, 7, 7), Enum.PartType.Ball, "AuraDome"), "main", 1)
         p.Material = Enum.Material.ForceField
         p.Transparency = .8
-        local g = {idx = addMover(p)}
+        local outer = track(mkPart(Vector3.new(7.8, 7.8, 7.8), Enum.PartType.Ball, "AuraDomeGlow"), "light", 2)
+        outer.Material = Enum.Material.Neon
+        outer.Transparency = .94
+        outer.Color = accent
+        local g = {idx = addMover(p), outerIdx = addMover(outer)}
         function g.update(t, dt, cf, k, speedRatio)
             local sp = AM.speed / 100
             local s = 7.2 * (1 + math.sin(t * 1.7 * sp) * .04 + (speedRatio or 0) * .06) * (.9 + .1 * k)
+            local shell = s * (1.09 + math.sin(t * 1.35 * sp) * .012)
+            local center = CFrame.new(cf.Position + Vector3.new(0, .3, 0))
             p.Size = Vector3.new(s, s, s)
-            moverCF[g.idx] = CFrame.new(cf.Position + Vector3.new(0, .3, 0))
-            p.Transparency = math.clamp(.78 - (k - 1) * .12 - (AM.flash or 0) * .2 + math.sin(t * 2.1) * .04, .5, .95)
+            outer.Size = Vector3.new(shell, shell, shell)
+            moverCF[g.idx] = center
+            moverCF[g.outerIdx] = center
+            p.Transparency = math.clamp(.76 - (k - 1) * .12 - (AM.flash or 0) * .2 + math.sin(t * 2.1) * .035, .48, .94)
+            outer.Transparency = math.clamp(.955 - (k - 1) * .025 - (AM.flash or 0) * .09 + math.sin(t * 1.7) * .018, .86, .985)
+            outer.Color = palette(t, 2)
         end
         fx.dome = g
     end
@@ -6046,14 +6074,14 @@ do
     function AM.build.light(root)
         local l = Instance.new("PointLight")
         l.Name = "AuraMeLight"
-        l.Range, l.Brightness, l.Shadows, l.Color = 16, 2, false, accent
+        l.Range, l.Brightness, l.Shadows, l.Color = 19, 2.1, false, accent
         l.Parent = root
         local g = {}
         function g.update(t, dt, cf, k)
             local meter = AM.music and __AuraFix_audioMeter
             local beat = meter and meter.beat or 0
-            l.Brightness = (1.3 + beat * 1.6) * k + (AM.flash or 0) * 2.2
-            l.Range = 14 + 6 * k
+            l.Brightness = (1.4 + beat * 1.8) * k + (AM.flash or 0) * 2.5
+            l.Range = 16 + 7 * k
         end
         function g.recolor(c1) l.Color = c1 end
         function g.destroy() pcall(function() l:Destroy() end) end
@@ -6486,7 +6514,6 @@ do
     RTX.opt.shadows, RTX.opt.glow, RTX.opt.grade, RTX.opt.haze, RTX.opt.dof = true, true, true, true, true
     RTX.opt.softglow, RTX.opt.water = true, true
 
-    -- extra "RTX quality" layer on top of every mode profile
     function RTX.polish(p, atmoBase)
         local k = math.min(RTX.k, 1.5)
         local q = {}
@@ -6532,7 +6559,6 @@ do
         return q
     end
 
-    -- optional Future lighting (needs an executor with gethiddenproperty / sethiddenproperty)
     function RTX.setTech(on)
         if not sethiddenproperty then return end
         if on then
@@ -6732,11 +6758,11 @@ do
                 ColorShift_Top = Color3.fromRGB(255, 232, 205), ColorShift_Bottom = Color3.fromRGB(22, 34, 48),
                 GeographicLatitude = 41,
             },
-            bloom = {Intensity = .55 * k, Size = 36, Threshold = .85},
-            cc = {Brightness = .02 * k, Contrast = .16 * k, Saturation = .1 * k, TintColor = WHITE:Lerp(Color3.fromRGB(255, 238, 222), .6 * kc)},
-            rays = {Intensity = .14 * k, Spread = .55},
+            bloom = {Intensity = .6 * k, Size = 42, Threshold = .8},
+            cc = {Brightness = .02 * k, Contrast = .18 * k, Saturation = .13 * k, TintColor = WHITE:Lerp(Color3.fromRGB(255, 238, 222), .6 * kc)},
+            rays = {Intensity = .16 * k, Spread = .58},
             dof = {FarIntensity = .22 * k, NearIntensity = .05 * k, FocusDistance = 40, InFocusRadius = 28},
-            atmo = {Density = .26, Offset = .2, Color = Color3.fromRGB(206, 214, 230), Decay = Color3.fromRGB(110, 120, 140), Glare = .18 * k, Haze = 1.2},
+            atmo = {Density = .24, Offset = .2, Color = Color3.fromRGB(210, 220, 240), Decay = Color3.fromRGB(110, 120, 145), Glare = .22 * k, Haze = 1.4},
             terrain = {WaterReflectance = 1, WaterTransparency = .72},
             vig = math.clamp(.42 * k, 0, .75),
             bars = .105,
@@ -6874,11 +6900,11 @@ do
                 ColorShift_Top = Color3.fromRGB(120, 70, 200), ColorShift_Bottom = Color3.fromRGB(20, 60, 90),
                 GeographicLatitude = 35,
             },
-            bloom = {Intensity = 1.05 * k, Size = 44, Threshold = .7},
-            cc = {Brightness = -.02, Contrast = .25 * k, Saturation = .35 * k, TintColor = WHITE:Lerp(Color3.fromRGB(215, 190, 255), .7 * kc)},
-            rays = {Intensity = .05, Spread = .4},
+            bloom = {Intensity = 1.02 * k, Size = 50, Threshold = .66},
+            cc = {Brightness = -.015, Contrast = .28 * k, Saturation = .39 * k, TintColor = WHITE:Lerp(Color3.fromRGB(210, 185, 255), .7 * kc)},
+            rays = {Intensity = .065 * k, Spread = .44},
             dof = {FarIntensity = .12 * k, NearIntensity = 0, FocusDistance = 60, InFocusRadius = 40},
-            atmo = {Density = .42, Offset = .1, Color = Color3.fromRGB(120, 80, 200), Decay = Color3.fromRGB(40, 20, 90), Glare = .6, Haze = 2.4},
+            atmo = {Density = .38, Offset = .1, Color = Color3.fromRGB(128, 88, 210), Decay = Color3.fromRGB(44, 22, 98), Glare = .68, Haze = 2.6},
             terrain = {WaterReflectance = 1, WaterTransparency = .5, WaterWaveSize = .4},
             vig = math.clamp(.5 * k, 0, .8),
             bars = 0,
@@ -7032,11 +7058,11 @@ do
                 ColorShift_Top = Color3.fromRGB(255, 190, 120), ColorShift_Bottom = Color3.fromRGB(70, 50, 80),
                 GeographicLatitude = 28,
             },
-            bloom = {Intensity = .75 * k, Size = 52, Threshold = .8},
-            cc = {Brightness = .03, Contrast = .12 * k, Saturation = .28 * k, TintColor = WHITE:Lerp(Color3.fromRGB(255, 214, 170), .75 * kc)},
-            rays = {Intensity = .42 * k, Spread = .95},
+            bloom = {Intensity = .8 * k, Size = 58, Threshold = .76},
+            cc = {Brightness = .025, Contrast = .15 * k, Saturation = .32 * k, TintColor = WHITE:Lerp(Color3.fromRGB(255, 208, 158), .75 * kc)},
+            rays = {Intensity = .38 * k, Spread = .9},
             dof = {FarIntensity = .1 * k, NearIntensity = 0, FocusDistance = 70, InFocusRadius = 45},
-            atmo = {Density = .38, Offset = .35, Color = Color3.fromRGB(255, 196, 150), Decay = Color3.fromRGB(230, 130, 110), Glare = .9, Haze = 2},
+            atmo = {Density = .34, Offset = .35, Color = Color3.fromRGB(255, 202, 158), Decay = Color3.fromRGB(235, 136, 112), Glare = .95, Haze = 1.8},
             terrain = {WaterReflectance = 1, WaterTransparency = .6},
             vig = math.clamp(.36 * k, 0, .7),
             bars = 0,
@@ -7235,7 +7261,6 @@ do
     local modeOpts = {"Аккуратный", "Плавный", "Обычный"}
     local hitOpts = {"Голова", "Тело", "Рука", "Ноги", "Рандом"}
 
-    -- ================= ИГРОК =================
     local pp = Util.page("Игрок")
     Util.section(pp, "БЫСТРЫЙ ДОСТУП")
     do
@@ -7283,7 +7308,7 @@ do
     Util.toggle(pp, "Наклон тела в полёте", true, function(v) FLY.tiltOn = v end, "flyTilt")
     Util.section(pp, "ДВИЖЕНИЕ")
     Util.noclipToggle = Util.toggle(pp, "Noclip", false, function(v) Util.noclipSet(v) end)
-    -- ================= БОЙ =================
+    
     local pc = Util.page("Бой")
     Util.section(pc, "AIMBOT")
     Util.aimToggle = Util.toggle(pc, "Aimbot", false, function(v) AIM.on = v end)
@@ -7310,7 +7335,6 @@ do
     local combatHelp = Util.card(pc, 30)
     Util.lbl(combatHelp, "Клавиши: Настройки → Бинды", 11, C.sub, {Position = UDim2.fromOffset(10, 0), Size = UDim2.new(1, -20, 1, 0)})
 
-    -- ================= AURA.ME =================
     local pa = pp
     local function rebuild() if AM.on then Util.auraMeRebuild() end end
     Util.section(pa, "AURA.ME")
@@ -7590,9 +7614,13 @@ for i, name in ipairs(order) do
 	    function() return __AuraFix_cur == name and accent or C.sub end)
 	__AuraFix_tabBtns[name] = b
 	cn(b.Activated,
-	    function() __AuraFix_selectTab(name) end)
+	    function()
+        if __AuraFixUtil.playUiSound then __AuraFixUtil.playUiSound("click") end
+        __AuraFix_selectTab(name)
+    end)
 	cn(b.MouseEnter,
 	    function()
+        if __AuraFixUtil.playUiSound then __AuraFixUtil.playUiSound("hover") end
 		if __AuraFix_cur ~= name then
 			tw(b,
 			    {TextColor3 = C.text:Lerp(C.sub,
@@ -7699,7 +7727,7 @@ RS:BindToRenderStep("AuraMenuLoop",
 	end
 
 	local playing = sound.IsPlaying
-    -- PlaybackLoudness is Roblox's available client-side amplitude meter (not a true FFT).
+    
     local rawLoud = playing and math.clamp(sound.PlaybackLoudness / 420,
         0,
         1) or 0
@@ -7729,7 +7757,7 @@ RS:BindToRenderStep("AuraMenuLoop",
     local loud = math.clamp(meter.low * .35 + meter.mid * .4 + meter.high * .25 + meter.beat * .18,
         0,
         1)
-	-- Original Aurora mode: slow hue drift and a restrained glow pulse, only while enabled.
+	
     if envOn and envPreset == 6 and envStrength > 0 then
         if envSkyIsActive and envSky.Parent == Lighting then
             local skyRotation = envSky.SkyboxOrientation.Y + math.max(0,
@@ -7773,7 +7801,7 @@ RS:BindToRenderStep("AuraMenuLoop",
 	for n, b in ipairs(__AuraFix_bars) do
         local x = (n - 1) / math.max(1,
             #__AuraFix_bars - 1)
-        -- Approximate bands from the loudness envelope; Roblox exposes no per-frequency FFT bins.
+        
         local bass = meter.low * (1 - x * .68)
         local midBand = meter.mid * (1 - math.abs(x - .5) * 1.25)
         local treble = meter.high * (.22 + x * .78)
@@ -7819,9 +7847,188 @@ RS:BindToRenderStep("AuraMenuLoop",
 	end
 end)
 
--- Finalize the menu after all original widgets have been constructed.
-
 __AuraFixUtil.applyEnvironmentPreset(envPreset)
 __AuraFix_selectTab(order[1], true)
 __AuraFixUtil.setOpen(true)
-task.delay(.9, function() __AuraFixUtil.toast("AURA загружено") end)
+local function showAuraIntro()
+    local camera = workspace.CurrentCamera
+    local viewport = camera and camera.ViewportSize or Vector2.new(420, 760)
+    local cardWidth = math.clamp(viewport.X - 32, 248, 372)
+    local splash = __AuraFixUtil.new("CanvasGroup", {
+        Name = "AuraIntro",
+        Size = UDim2.fromScale(1, 1),
+        BackgroundColor3 = Color3.fromRGB(7, 8, 15),
+        BackgroundTransparency = 0,
+        GroupTransparency = 1,
+        Active = true,
+        ZIndex = 500,
+    }, gui)
+    local backdrop = __AuraFixUtil.new("Frame", {
+        Size = UDim2.fromScale(1, 1),
+        BackgroundColor3 = Color3.fromRGB(8, 9, 17),
+        BackgroundTransparency = .08,
+        ZIndex = 500,
+    }, splash)
+    __AuraFixUtil.new("UIGradient", {
+        Rotation = 34,
+        Color = ColorSequence.new(Color3.fromRGB(19, 14, 38), Color3.fromRGB(6, 9, 18)),
+    }, backdrop)
+    local glowA = __AuraFixUtil.new("Frame", {
+        AnchorPoint = Vector2.new(.5, .5),
+        Position = UDim2.fromScale(.5, .48),
+        Size = UDim2.fromOffset(cardWidth + 110, 260),
+        BackgroundColor3 = accent,
+        BackgroundTransparency = .88,
+        ZIndex = 501,
+    }, splash)
+    __AuraFixUtil.round(glowA, 200)
+    __AuraFixUtil.new("UIGradient", {
+        Rotation = 90,
+        Transparency = NumberSequence.new({NumberSequenceKeypoint.new(0, .25), NumberSequenceKeypoint.new(.5, .8), NumberSequenceKeypoint.new(1, 1)}),
+    }, glowA)
+    local card = __AuraFixUtil.new("Frame", {
+        AnchorPoint = Vector2.new(.5, .5),
+        Position = UDim2.fromScale(.5, .5),
+        Size = UDim2.fromOffset(cardWidth, 184),
+        BackgroundColor3 = C.card,
+        BackgroundTransparency = .035,
+        ZIndex = 502,
+    }, splash)
+    __AuraFixUtil.round(card, 18)
+    __AuraFixUtil.stroke(card, 1.2, accent, .38)
+    __AuraFixUtil.new("UIGradient", {
+        Rotation = 135,
+        Color = ColorSequence.new(C.card2, C.bg),
+    }, card)
+    local cardScale = __AuraFixUtil.new("UIScale", {Scale = .9}, card)
+    local topLine = __AuraFixUtil.new("Frame", {
+        Position = UDim2.fromOffset(20, 0),
+        Size = UDim2.new(1, -40, 0, 2),
+        BackgroundColor3 = accent,
+        ZIndex = 504,
+    }, card)
+    __AuraFixUtil.round(topLine, 2)
+    __AuraFixUtil.new("UIGradient", {
+        Color = ColorSequence.new({ColorSequenceKeypoint.new(0, Color3.fromRGB(95, 220, 255)), ColorSequenceKeypoint.new(.5, accent), ColorSequenceKeypoint.new(1, Color3.fromRGB(210, 115, 255))}),
+    }, topLine)
+    local emblem = __AuraFixUtil.new("Frame", {
+        AnchorPoint = Vector2.new(.5, 0),
+        Position = UDim2.new(.5, 0, 0, 19),
+        Size = UDim2.fromOffset(54, 54),
+        BackgroundColor3 = C.card2,
+        ZIndex = 504,
+    }, card)
+    __AuraFixUtil.round(emblem, 27)
+    __AuraFixUtil.stroke(emblem, 1.5, accent, .22)
+    local ring = __AuraFixUtil.new("Frame", {
+        AnchorPoint = Vector2.new(.5, .5),
+        Position = UDim2.fromScale(.5, .5),
+        Size = UDim2.fromOffset(36, 36),
+        BackgroundTransparency = 1,
+        ZIndex = 505,
+    }, emblem)
+    __AuraFixUtil.round(ring, 20)
+    local ringStroke = __AuraFixUtil.stroke(ring, 2.2, Color3.fromRGB(125, 210, 255), .08)
+    local core = __AuraFixUtil.new("Frame", {
+        AnchorPoint = Vector2.new(.5, .5),
+        Position = UDim2.fromScale(.5, .5),
+        Size = UDim2.fromOffset(13, 13),
+        BackgroundColor3 = accent,
+        ZIndex = 506,
+    }, emblem)
+    __AuraFixUtil.round(core, 10)
+    __AuraFixUtil.new("UIGradient", {
+        Rotation = 45,
+        Color = ColorSequence.new(Color3.fromRGB(170, 245, 255), accent),
+    }, core)
+    local mark = __AuraFixUtil.new("TextLabel", {
+        AnchorPoint = Vector2.new(.5, 0),
+        Position = UDim2.new(.5, 0, 0, 81),
+        Size = UDim2.new(1, -28, 0, 27),
+        BackgroundTransparency = 1,
+        Text = "A U R A",
+        Font = Enum.Font.GothamBlack,
+        TextSize = 22,
+        TextColor3 = WHITE,
+        ZIndex = 504,
+    }, card)
+    local sub = __AuraFixUtil.new("TextLabel", {
+        AnchorPoint = Vector2.new(.5, 0),
+        Position = UDim2.new(.5, 0, 0, 108),
+        Size = UDim2.new(1, -28, 0, 17),
+        BackgroundTransparency = 1,
+        Text = "A LITTLE LIGHT. A LOT OF AURA.",
+        Font = Enum.Font.GothamMedium,
+        TextSize = 9,
+        TextColor3 = C.sub,
+        ZIndex = 504,
+    }, card)
+    local progressBack = __AuraFixUtil.new("Frame", {
+        Position = UDim2.new(0, 22, 1, -25),
+        Size = UDim2.new(1, -44, 0, 3),
+        BackgroundColor3 = C.off,
+        ZIndex = 504,
+    }, card)
+    __AuraFixUtil.round(progressBack, 4)
+    local progress = __AuraFixUtil.new("Frame", {
+        Size = UDim2.new(0, 0, 1, 0),
+        BackgroundColor3 = accent,
+        ZIndex = 505,
+    }, progressBack)
+    __AuraFixUtil.round(progress, 4)
+    __AuraFixUtil.new("UIGradient", {
+        Color = ColorSequence.new({ColorSequenceKeypoint.new(0, Color3.fromRGB(92, 220, 255)), ColorSequenceKeypoint.new(.5, accent), ColorSequenceKeypoint.new(1, Color3.fromRGB(218, 126, 255))}),
+    }, progress)
+    local status = __AuraFixUtil.new("TextLabel", {
+        Position = UDim2.new(0, 22, 1, -47),
+        Size = UDim2.new(1, -44, 0, 15),
+        BackgroundTransparency = 1,
+        Text = lang == "English" and "PREPARING YOUR EXPERIENCE" or (lang == "Español" and "PREPARANDO TU EXPERIENCIA" or "ПОДГОТОВКА ИНТЕРФЕЙСА"),
+        Font = Enum.Font.GothamBold,
+        TextSize = 9,
+        TextColor3 = accent:Lerp(WHITE, .18),
+        TextXAlignment = Enum.TextXAlignment.Center,
+        ZIndex = 504,
+    }, card)
+    local dots = {}
+    for i = 1, 5 do
+        local dot = __AuraFixUtil.new("Frame", {
+            AnchorPoint = Vector2.new(.5, .5),
+            Position = UDim2.new(.5, (i - 3) * 15, 1, -9),
+            Size = UDim2.fromOffset(3, 3),
+            BackgroundColor3 = i == 3 and accent or C.sub,
+            BackgroundTransparency = .25,
+            ZIndex = 505,
+        }, card)
+        __AuraFixUtil.round(dot, 3)
+        dots[i] = dot
+    end
+    tw(splash, {GroupTransparency = 0}, .38, EASE.Sine)
+    tw(cardScale, {Scale = 1}, .62, EASE.Back)
+    tw(emblem, {Rotation = 12}, .7, EASE.Sine)
+    tw(ring, {Rotation = -180}, .96, EASE.Quart)
+    tw(glowA, {BackgroundTransparency = .94, Size = UDim2.fromOffset(cardWidth + 145, 285)}, 1.2, EASE.Sine)
+    tw(progress, {Size = UDim2.new(1, 0, 1, 0)}, .92, EASE.Quint)
+    for i, dot in ipairs(dots) do
+        task.delay(i * .055, function()
+            if dot.Parent then tw(dot, {BackgroundTransparency = .78, Size = UDim2.fromOffset(4, 4)}, .28, EASE.Sine) end
+        end)
+    end
+    task.delay(1.35, function()
+        if not splash.Parent then return end
+        status.Text = lang == "English" and "READY TO GLOW" or (lang == "Español" and "LISTO PARA BRILLAR" or "ГОТОВО К ЗАПУСКУ")
+        status.TextColor3 = C.good
+        tw(ringStroke, {Color = C.good, Transparency = .05, Thickness = 2.6}, .22, EASE.Sine)
+        tw(core, {Size = UDim2.fromOffset(17, 17)}, .25, EASE.Back)
+    end)
+    task.delay(1.62, function()
+        if not splash.Parent then return end
+        tw(splash, {GroupTransparency = 1}, .38, EASE.Sine)
+        tw(cardScale, {Scale = .96}, .32, EASE.Quad, DIR.In)
+        task.delay(.42, function()
+            if splash.Parent then splash:Destroy() end
+        end)
+    end)
+end
+showAuraIntro()
+task.delay(2.55, function() __AuraFixUtil.toast("AURA загружено") end)
